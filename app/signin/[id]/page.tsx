@@ -17,13 +17,30 @@ import ForgotPassword from '@/components/ui/AuthForms/ForgotPassword';
 import UpdatePassword from '@/components/ui/AuthForms/UpdatePassword';
 import SignUp from '@/components/ui/AuthForms/Signup';
 
+type SignInParams = Promise<{ id: string }>;
+type SignInSearchParams = Promise<{
+  disable_button?: string | string[] | boolean;
+}>;
+
 export default async function SignIn({
   params,
   searchParams
 }: {
-  params: { id: string };
-  searchParams: { disable_button: boolean };
+  params: SignInParams;
+  searchParams: SignInSearchParams;
 }) {
+  const [{ id }, search] = await Promise.all([params, searchParams]);
+
+  const normalizeDisableFlag = (
+    value: string | string[] | boolean | undefined
+  ): boolean => {
+    if (Array.isArray(value)) return value[0] === 'true';
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  };
+
+  const disableButton = normalizeDisableFlag(search.disable_button);
+
   const { allowOauth, allowEmail, allowPassword } = getAuthTypes();
   const viewTypes = getViewTypes();
   const redirectMethod = getRedirectMethod();
@@ -32,17 +49,18 @@ export default async function SignIn({
   let viewProp: string;
 
   // Assign url id to 'viewProp' if it's a valid string and ViewTypes includes it
-  if (typeof params.id === 'string' && viewTypes.includes(params.id)) {
-    viewProp = params.id;
+  if (typeof id === 'string' && viewTypes.includes(id)) {
+    viewProp = id;
   } else {
+    const cookieStore = await cookies();
     const preferredSignInView =
-      cookies().get('preferredSignInView')?.value || null;
+      cookieStore.get('preferredSignInView')?.value || null;
     viewProp = getDefaultSignInView(preferredSignInView);
     return redirect(`/signin/${viewProp}`);
   }
 
   // Check if the user is already logged in and redirect to the account page if so
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const {
     data: { user }
@@ -81,14 +99,14 @@ export default async function SignIn({
             <EmailSignIn
               allowPassword={allowPassword}
               redirectMethod={redirectMethod}
-              disableButton={searchParams.disable_button}
+              disableButton={disableButton}
             />
           )}
           {viewProp === 'forgot_password' && (
             <ForgotPassword
               allowEmail={allowEmail}
               redirectMethod={redirectMethod}
-              disableButton={searchParams.disable_button}
+              disableButton={disableButton}
             />
           )}
           {viewProp === 'update_password' && (
